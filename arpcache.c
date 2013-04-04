@@ -121,18 +121,15 @@ void sample_arp_cache() {
 #include <sys/strstat.h>
 #include <sys/tihdr.h>
 int sample_arp_cache(arp_entry **l) {
-  static int s=-1;
-  struct opthdr *req;
-  dl_connect_res_t *ack;
-  int offset = 0, j, getcode, flags;
+  int s=-1, getcode, flags, count = 0;
   char buf[512], *dbuf = NULL;
-  int flagsp = 0, count = 0;
+  struct opthdr *req;
   struct strbuf ctlbuf, databuf;
   struct T_optmgmt_req *tor = (struct T_optmgmt_req *)buf;
   struct T_optmgmt_ack *toa = (struct T_optmgmt_ack *)buf;
   struct T_error_ack *tea = (struct T_error_ack *)buf;
   mib2_ipNetToMediaEntry_t *np;
-  mib2_ip_t *ip;
+  mib2_ip_t *ip = NULL;
 
   if(l) *l = NULL;
   if(!arpcache_private) {
@@ -177,18 +174,18 @@ int sample_arp_cache(arp_entry **l) {
     getcode = getmsg(s, &ctlbuf, (struct strbuf *)0, &flags);
     if (getcode == -1) return -1;
     if (getcode == 0 &&
-        ctlbuf.len >= sizeof (struct T_optmgmt_ack) &&
+        ctlbuf.len >= (int)sizeof (struct T_optmgmt_ack) &&
         toa->PRIM_type == T_OPTMGMT_ACK &&
         toa->MGMT_flags == T_SUCCESS &&
         req->len == 0)  {
       break; /* ?? */
     }
-    if (ctlbuf.len >= sizeof (struct T_error_ack) &&
+    if (ctlbuf.len >= (int)sizeof (struct T_error_ack) &&
         tea->PRIM_type == T_ERROR_ACK) {
       goto error;
     }
     if (getcode != MOREDATA ||
-        ctlbuf.len < sizeof (struct T_optmgmt_ack) ||
+        ctlbuf.len < (int)sizeof (struct T_optmgmt_ack) ||
         toa->PRIM_type != T_OPTMGMT_ACK ||
         toa->MGMT_flags != T_SUCCESS) {
       goto error;

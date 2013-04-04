@@ -55,7 +55,6 @@ namespace node {
   Handle<Value> IFE::New(const Arguments& args) {
     HandleScope scope;
     IFE *p = new IFE();
-    char module[128];
 
     p->Wrap(args.This());
     if(if_initialize()) return scope.Close(Undefined());
@@ -122,11 +121,12 @@ namespace node {
 
   Handle<Value> IFE::up(const Arguments& args) {
     HandleScope scope;
-    struct interface iface = { 0 };
+    struct interface iface;
 
     Handle<Object> obj = args.Holder();
     IFE *ife = ObjectWrap::Unwrap<IFE>(obj);
 
+    memset((void *)&iface, 0, sizeof(iface));
     Local<Object> o = args[0]->ToObject();
     Local<Value> vname = o->Get(String::New("name"));
     if(vname->IsUndefined()) {
@@ -165,10 +165,11 @@ namespace node {
 
   Handle<Value> IFE::down(const Arguments& args) {
     HandleScope scope;
-    struct interface iface = { 0 };
+    struct interface iface;
 
     Handle<Object> obj = args.Holder();
     IFE *ife = ObjectWrap::Unwrap<IFE>(obj);
+    memset((void *)&iface, 0, sizeof(iface));
 
     if(args[0]->IsUndefined()) {
       ThrowException(Exception::TypeError(String::New("argument undefined"))); \
@@ -276,7 +277,8 @@ namespace node {
       }
     }
 
-    if_send_spoof_request(dev, my_ip, r_ip, good_mac ? r_mac : NULL, count, do_ping);
+    count = if_send_spoof_request(dev, my_ip, r_ip, good_mac ? r_mac : NULL, count, do_ping);
+    return scope.Close(Integer::New(count));
   }
 
   extern "C" void

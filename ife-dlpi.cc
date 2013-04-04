@@ -109,12 +109,12 @@ dlpi_get_reply(int fd, union DL_primitives *reply,
     return -1;
   }
 
-  if(buf.len < sizeof(ulong)) {
+  if(buf.len < (int)sizeof(ulong)) {
     _if_error = _if_error_dlpi_unexpected;
     return -1;
   }
 
-  if(reply->dl_primitive == expected_prim)
+  if(reply->dl_primitive == (unsigned int)expected_prim)
     return 0;
 
   if (reply->dl_primitive == DL_ERROR_ACK)

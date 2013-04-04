@@ -11,8 +11,8 @@
                     ],
                 }
             ]
-        },
-        'OS=="linux"', {
+        }],
+        ['OS=="linux"', {
             'targets': [
                 {
                     'target_name': 'IFEBinding',
@@ -23,8 +23,8 @@
                     ],
                 }
             ]
-        },
-        'OS=="solaris"', {
+        }],
+        ['OS=="solaris"', {
             'targets': [
                 {
                     'target_name': 'IFEBinding',
@@ -35,8 +35,8 @@
                     ],
                 }
             ]
-        },
-        {
+        }],
+        ['1==1', {
             'targets': [ 
                 {
                     'target_name': 'IFEStub',
