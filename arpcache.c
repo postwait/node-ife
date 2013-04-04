@@ -202,7 +202,6 @@ int sample_arp_cache(arp_entry **l) {
 
     if(req->level == MIB2_IP && req->name == 0) {
       ip = (mib2_ip_t *)dbuf;
-      fprintf(stderr, "ip->ipNetToMediaEntrySize -> %d\n", ip->ipNetToMediaEntrySize);
     }
     if(!ip || req->level != MIB2_IP || req->name != MIB2_IP_MEDIA) continue;
     for(np = (mib2_ipNetToMediaEntry_t *)dbuf;
@@ -227,64 +226,6 @@ int sample_arp_cache(arp_entry **l) {
   if(dbuf) free(dbuf);
   return -1;
 }
-
-#if 0
-  req->dl_primitive = DL_UDERROR_IND;
-  req->dl_dest_addr_length = 0x0c;
-  req->dl_dest_addr_offset = 0x10;
-  req->dl_src_addr_length = 0x80;
-  req->dl_src_addr_offset = 0x104;
-  buf.maxlen = 0;
-  buf.len = sizeof(dl_data_ack_ind_t);
-  buf.buf = (caddr_t)req;
-  putmsg(s, &buf, NULL, 0);
-  buf.maxlen = sizeof(buffer);
-  buf.len = 0;
-  buf.buf = (caddr_t)ack;
-  while(1) {
-    int data[7];
-
-    buf.maxlen = sizeof(data);
-    buf.len = 0;
-    buf.buf = (caddr_t)data;
-    if(getmsg(s, &buf, NULL, &flagsp) != MOREDATA)
-      break;
-    if(dbuffer)
-      dbuffer = (char *)realloc(dbuffer, offset+data[6]);
-    else
-      dbuffer = (char *)malloc(offset+data[6]);
-    buf.maxlen = data[6];
-    buf.buf = (caddr_t)((char *)dbuffer + offset);
-    if(getmsg(s, NULL, &buf, &flagsp))
-      break;
-    offset+=data[6];
-  }
-  if(dbuffer) {
-    int r, count=0;
-    for(r=0; r<offset/4; r++) { 
-      unsigned int *b = (unsigned int *)dbuffer+r;
-      unsigned char *h;
-      struct in_addr a;
-      if(b[0] == 0x8 && b[1] > 0x0 && b[1] < IFNAMSIZ) {
-	char *ifname = (char *)(b+2);
-	ifname[b[1]] = '\0';
-        b += 2;
-	b += IFNAMSIZ/sizeof(unsigned int);
-	b += 4; /* something else here */
-fprintf(stderr, "*b -> %d\n", *b);
-	if(0 && *b != sizeof(ether_addr_t)) /* sizeof mac address */
-	    continue;
-	h = (unsigned char *)(b+1); 
-fprintf(stderr, "b[11] -> %d\n", b[11]);
-	if(b[11] != sizeof(struct in_addr)) /* sizeof ipv4 address */
-            continue;
-        a.s_addr = b[9];  /* the address */
-      }
-    }
-
-    arpcache_private[count].ipaddr.s_addr = 0;
-    free(dbuffer);
-#endif
 #else
 int sample_arp_cache(arp_entry **l) {
   if(!arpcache_private) {
