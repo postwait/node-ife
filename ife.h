@@ -4,6 +4,7 @@
 #ifndef _IFE_H_
 #define _IFE_H_
 
+#include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/in.h>
 
