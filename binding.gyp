@@ -7,7 +7,8 @@
                     'sources': [
                         'IFE.cc',
                         'ife-icmp-support.cc',
-                        'ife-bpf.cc'
+                        'ife-bpf.cc',
+                        'arpcache-ctlnet.cc'
                     ],
                 }
             ]
@@ -19,7 +20,8 @@
                     'sources': [
                         'IFE.cc',
                         'ife-icmp-support.cc',
-                        'ife-sockpacket.cc'
+                        'ife-sockpacket.cc',
+                        'arpcache-proc.cc'
                     ],
                 }
             ]
@@ -31,7 +33,21 @@
                     'sources': [
                         'IFE.cc',
                         'ife-icmp-support.cc',
-                        'ife-dlpi.cc'
+                        'ife-dlpi.cc',
+                        'arpcache-dlpi.cc'
+                    ],
+                }
+            ]
+        }],
+        ['OS=="windows"', {
+            'targets': [
+                {
+                    'target_name': 'IFEBinding',
+                    'sources': [
+                        'IFE.cc',
+                        'ife-icmp-support.cc',
+                        'ife-win32.cc',
+                        'arpcache-none.cc'
                     ],
                 }
             ]

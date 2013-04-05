@@ -513,4 +513,3 @@ if_up(struct interface *areq) {
   return -1;
 }
 
-#include "arpcache.c"
