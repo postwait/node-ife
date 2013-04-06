@@ -2,6 +2,9 @@
 
 IFE is (network) interface management for Node.js.  It works on Linux, Illumos, FreeBSD, MacOS X.
 
+    var IFEdriver = require('ife'),
+        ife = new IFEdriver();
+
 ### API ###
 
     var success =
