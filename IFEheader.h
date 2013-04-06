@@ -4,7 +4,6 @@
 #include <node_object_wrap.h>
 #include <v8.h>
 
-#include <sys/dtrace.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 
