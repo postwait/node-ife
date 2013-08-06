@@ -286,5 +286,5 @@ namespace node {
     IFE::Initialize(target);
   }
 
-  NODE_MODULE(IFEBindings, init)
+  NODE_MODULE(IFEBinding, init)
 } // namespace node
