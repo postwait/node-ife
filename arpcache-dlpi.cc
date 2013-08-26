@@ -69,11 +69,8 @@ int sample_arp_cache(arp_entry **l) {
     }
     if(ioctl(s, I_PUSH, "tcp") ||
        ioctl(s, I_PUSH, "udp") ||
-       ioctl(s, I_PUSH, "icmp") ) {
-      close(s);
-      s = -1;
-      return -1;
-    }
+       ioctl(s, I_PUSH, "icmp") )
+      goto error;
   }
 
   tor->PRIM_type = T_SVR4_OPTMGMT_REQ;
@@ -89,16 +86,14 @@ int sample_arp_cache(arp_entry **l) {
   ctlbuf.buf = (char *)buf;
   ctlbuf.len = tor->OPT_length + tor->OPT_offset;
   flags = 0;
-  if (putmsg(s, &ctlbuf, (struct strbuf *)0, flags) == -1) {
-    return -1;
-  }
+  if (putmsg(s, &ctlbuf, (struct strbuf *)0, flags) == -1) goto error;
 
   req = (struct opthdr *)&toa[1];
   ctlbuf.maxlen = sizeof (buf);
   for (;;) {
     flags = 0;
     getcode = getmsg(s, &ctlbuf, (struct strbuf *)0, &flags);
-    if (getcode == -1) return -1;
+    if (getcode == -1) goto error;
     if (getcode == 0 &&
         ctlbuf.len >= (int)sizeof (struct T_optmgmt_ack) &&
         toa->PRIM_type == T_OPTMGMT_ACK &&
@@ -147,8 +142,10 @@ int sample_arp_cache(arp_entry **l) {
     dbuf = NULL;
   }
   if(l) *l = arpcache_private;
+  close(s);
   return count;
  error:
   if(dbuf) free(dbuf);
+  close(s);
   return -1;
 }

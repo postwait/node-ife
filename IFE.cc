@@ -1,6 +1,8 @@
 /* Copyright (c) 2013, OmniTI Computer Consulting, Inc. All rights reserved. */
 
+#ifndef BUILDING_NODE_EXTENSION
 #define BUILDING_NODE_EXTENSION
+#endif
 #include <v8.h>
 
 #include <node.h>
