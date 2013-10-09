@@ -124,18 +124,19 @@ int sample_arp_cache(arp_entry **l) {
     if(req->level == MIB2_IP && req->name == 0) {
       ip = (mib2_ip_t *)dbuf;
     }
-    if(!ip || req->level != MIB2_IP || req->name != MIB2_IP_MEDIA) continue;
-    for(np = (mib2_ipNetToMediaEntry_t *)dbuf;
-        (char *)np < (char *)dbuf + databuf.len;
-        np = (mib2_ipNetToMediaEntry_t *)((char *)np + ip->ipNetToMediaEntrySize)) {
-      if(count >= arpcache_psize) {
-        arpcache_psize <<= 1;
-        arpcache_private = (arp_entry *)realloc(arpcache_private, sizeof(arp_entry)*(arpcache_psize+1));
-      }
-      if(np->ipNetToMediaPhysAddress.o_length == ETH_ALEN) {
-        arpcache_private[count].ipaddr.s_addr = np->ipNetToMediaNetAddress;
-        memcpy(arpcache_private[count].mac, np->ipNetToMediaPhysAddress.o_bytes, ETH_ALEN);
-        count++;
+    if(ip && req->level == MIB2_IP && req->name == MIB2_IP_MEDIA) {
+      for(np = (mib2_ipNetToMediaEntry_t *)dbuf;
+          (char *)np < (char *)dbuf + databuf.len;
+          np = (mib2_ipNetToMediaEntry_t *)((char *)np + ip->ipNetToMediaEntrySize)) {
+        if(count >= arpcache_psize) {
+          arpcache_psize <<= 1;
+          arpcache_private = (arp_entry *)realloc(arpcache_private, sizeof(arp_entry)*(arpcache_psize+1));
+        }
+        if(np->ipNetToMediaPhysAddress.o_length == ETH_ALEN) {
+          arpcache_private[count].ipaddr.s_addr = np->ipNetToMediaNetAddress;
+          memcpy(arpcache_private[count].mac, np->ipNetToMediaPhysAddress.o_bytes, ETH_ALEN);
+          count++;
+        }
       }
     }
     free(dbuf);
