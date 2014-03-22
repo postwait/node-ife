@@ -128,6 +128,7 @@ int sample_arp_cache(arp_entry **l) {
       for(np = (mib2_ipNetToMediaEntry_t *)dbuf;
           (char *)np < (char *)dbuf + databuf.len;
           np = (mib2_ipNetToMediaEntry_t *)((char *)np + ip->ipNetToMediaEntrySize)) {
+        if(ip->ipNetToMediaEntrySize == 0) break;
         if(count >= arpcache_psize) {
           arpcache_psize <<= 1;
           arpcache_private = (arp_entry *)realloc(arpcache_private, sizeof(arp_entry)*(arpcache_psize+1));
