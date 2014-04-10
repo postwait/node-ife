@@ -183,6 +183,13 @@ namespace node {
       ThrowException(Exception::TypeError(String::New(*val)));
       return scope.Close(Undefined());
     }
+    if(args.Length() == 2) {
+      v8::String::AsciiValue val(args[1]);
+      if(*val && strlen(*val) > 0 
+        && strcmp(*val, "preplumbed")==0 ) {
+          iface.state = ETH_DOWN_STATE;
+      }
+    }
     
     if(if_down(&iface)) {
       Local<Value> vChr[2];
