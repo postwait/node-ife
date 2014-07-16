@@ -270,14 +270,15 @@ if_send_spoof_request(const char *dev,
 int
 if_list_ips(struct interface *ifs,
 	 int size) {
-  return(if_list_ips(ifs, size, ETH_UP_STATE));
+  return(if_list_ips(ifs, size, ETH_ANY_STATE));
 }
 int
 if_list_ips(struct interface *ifs,
-	 int size, int state) {
-  int count=0;
+   int size, int state) {
+  unsigned int i;
+  int ifr_up, count=0;
   struct ifconf d;
-  struct ifreq *ifr, *end, *cur, *temp;
+  struct ifreq *ifr0, *cur, *temp;
   struct in_addr ipaddr;
   char buffer[1024];
   
@@ -292,11 +293,9 @@ if_list_ips(struct interface *ifs,
     return 0;
   }
 
-  ifr=(struct ifreq *)(d.ifc_req);
-  end=(struct ifreq *)(((char *) ifr) + d.ifc_len);
-  while((ifr<end) && (count<size)) {
-    cur= ifr;
-    ifr = (struct ifreq *)(((char *)ifr)+sizeof(struct ifreq));
+  ifr0 = (struct ifreq *)(d.ifc_req);
+  for (i = 0; i < d.ifc_len / sizeof(struct ifreq) && count < size; i++) {
+    cur = (struct ifreq *)(((char *)ifr0) + i * sizeof(struct ifreq));
     if(((struct sockaddr_in *)&cur->ifr_addr)->sin_family != AF_INET)
       continue;
     memcpy(&ipaddr, &(((struct sockaddr_in *)&cur->ifr_addr)->sin_addr),
@@ -304,8 +303,11 @@ if_list_ips(struct interface *ifs,
     memcpy(temp, cur, sizeof(struct ifreq));
     if(ioctl (_if_sock, SIOCGIFFLAGS, (char *) cur) < 0)
       continue;
-    if((((cur->ifr_flags & IFF_UP) && state == ETH_UP_STATE)
-          || (!(cur->ifr_flags & IFF_UP) && state == ETH_DOWN_STATE)
+
+    ifr_up = cur->ifr_flags & IFF_UP;
+
+    if(((ifr_up && state == ETH_UP_STATE)
+          || (!ifr_up && state == ETH_DOWN_STATE)
           || state == ETH_ANY_STATE)
           && (cur->ifr_flags & IFF_BROADCAST)) {
       memcpy(&ifs[count].ipaddr, &ipaddr, sizeof(struct in_addr));
@@ -321,7 +323,7 @@ if_list_ips(struct interface *ifs,
       strncpy(ifs[count].ifname, cur->ifr_name, IFNAMSIZ);
       memset(ifs[count].mac, 0, ETH_ALEN);
       if_get_mac_address(ifs[count].ifname, (char *)ifs[count].mac);
-      if(cur->ifr_flags & IFF_UP)
+      if(ifr_up)
         ifs[count].state = ETH_UP_STATE;
       else
         ifs[count].state = ETH_DOWN_STATE;
@@ -409,7 +411,7 @@ if_up(struct interface *areq) {
   int i, ic, intexists=0;
   struct interface ifs[1024];
   struct interface  *existing_if = NULL;
-  ic = if_list_ips(ifs, 1024, ETH_ANY_STATE);
+  ic = if_list_ips(ifs, 1024);
   for(i=0; i<ic; i++) {
     if(!memcmp(&ifs[i].ipaddr, &(areq->ipaddr), sizeof(struct in_addr))) {
       if(ifs[i].state == ETH_DOWN_STATE)
