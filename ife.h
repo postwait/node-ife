@@ -24,6 +24,17 @@
 #define ETH_P_ARP 0x0806
 #endif
 
+#ifndef ETH_UP_STATE
+#define ETH_UP_STATE 1
+#endif
+#ifndef ETH_DOWN_STATE
+#define ETH_DOWN_STATE 2
+#endif
+#ifndef ETH_ANY_STATE
+#define ETH_ANY_STATE 3
+#endif
+
+
 struct interface {
   char ifname[IFNAMSIZ];
   struct in_addr ipaddr;
@@ -31,6 +42,7 @@ struct interface {
   struct in_addr netmask;
   struct in_addr network;
   unsigned char mac[ETH_ALEN];
+  int state;
 };
 
 typedef struct _arp_entry {
@@ -45,6 +57,7 @@ int if_send_spoof_request(const char *dev, unsigned int new_ip,
 			  unsigned int r_ip, const unsigned char *rm,
                           int count, int icmp);
 int if_list_ips(struct interface *ifs, int size);
+int if_list_ips(struct interface *ifs, int size, int state);
 int if_down(struct interface *areq);
 int if_up(struct interface *areq);
 int sample_arp_cache(arp_entry **);

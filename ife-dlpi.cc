@@ -270,9 +270,15 @@ if_send_spoof_request(const char *dev,
 int
 if_list_ips(struct interface *ifs,
 	 int size) {
-  int count=0;
+  return(if_list_ips(ifs, size, ETH_ANY_STATE));
+}
+int
+if_list_ips(struct interface *ifs,
+   int size, int state) {
+  unsigned int i;
+  int ifr_up, count=0;
   struct ifconf d;
-  struct ifreq *ifr, *end, *cur, *temp;
+  struct ifreq *ifr0, *cur, *temp;
   struct in_addr ipaddr;
   char buffer[1024];
   
@@ -287,11 +293,9 @@ if_list_ips(struct interface *ifs,
     return 0;
   }
 
-  ifr=(struct ifreq *)(d.ifc_req);
-  end=(struct ifreq *)(((char *) ifr) + d.ifc_len);
-  while((ifr<end) && (count<size)) {
-    cur= ifr;
-    ifr = (struct ifreq *)(((char *)ifr)+sizeof(struct ifreq));
+  ifr0 = (struct ifreq *)(d.ifc_req);
+  for (i = 0; i < d.ifc_len / sizeof(struct ifreq) && count < size; i++) {
+    cur = (struct ifreq *)(((char *)ifr0) + i * sizeof(struct ifreq));
     if(((struct sockaddr_in *)&cur->ifr_addr)->sin_family != AF_INET)
       continue;
     memcpy(&ipaddr, &(((struct sockaddr_in *)&cur->ifr_addr)->sin_addr),
@@ -299,7 +303,13 @@ if_list_ips(struct interface *ifs,
     memcpy(temp, cur, sizeof(struct ifreq));
     if(ioctl (_if_sock, SIOCGIFFLAGS, (char *) cur) < 0)
       continue;
-    if((cur->ifr_flags & IFF_UP) && (cur->ifr_flags & IFF_BROADCAST)) {
+
+    ifr_up = cur->ifr_flags & IFF_UP;
+
+    if(((ifr_up && state == ETH_UP_STATE)
+          || (!ifr_up && state == ETH_DOWN_STATE)
+          || state == ETH_ANY_STATE)
+          && (cur->ifr_flags & IFF_BROADCAST)) {
       memcpy(&ifs[count].ipaddr, &ipaddr, sizeof(struct in_addr));
       if(ioctl(_if_sock, SIOCGIFBRDADDR, (char *)temp) != -1)
 	memcpy(&ifs[count].bcast,
@@ -313,6 +323,10 @@ if_list_ips(struct interface *ifs,
       strncpy(ifs[count].ifname, cur->ifr_name, IFNAMSIZ);
       memset(ifs[count].mac, 0, ETH_ALEN);
       if_get_mac_address(ifs[count].ifname, (char *)ifs[count].mac);
+      if(ifr_up)
+        ifs[count].state = ETH_UP_STATE;
+      else
+        ifs[count].state = ETH_DOWN_STATE;
       count++;
     }
   }
@@ -324,6 +338,7 @@ int
 if_down(struct interface *areq) {
   int i, ic, isvirtual = 0;
   struct interface ifs[1024];
+  int state = areq->state;
  
   ic = if_list_ips(ifs, 1024);
   for(i=0; i<ic; i++) {
@@ -344,8 +359,19 @@ if_down(struct interface *areq) {
     ((struct sockaddr_in *)&todo.lifr_addr)->sin_family = AF_INET;
     memcpy(&((struct sockaddr_in *)&todo.lifr_addr)->sin_addr, &areq->ipaddr,
 	   sizeof(struct in_addr));
-    if(ioctl(_if_sock, SIOCLIFREMOVEIF, &todo) < 0) {
-      return -1;
+    if(state == ETH_DOWN_STATE) { /* Solaris leave preplumbed option */
+      if(ioctl(_if_sock, SIOCGLIFFLAGS, &todo) < 0) {
+        return -1;
+      } else {
+        todo.lifr_flags &= ~IFF_UP;
+        if(ioctl(_if_sock, SIOCSLIFFLAGS, &todo) < 0) {
+          return -1;
+        }
+      }
+    } else {
+      if(ioctl(_if_sock, SIOCLIFREMOVEIF, &todo) < 0) {
+        return -1;
+      }
     }
     return 0;
   } else
@@ -384,11 +410,16 @@ int
 if_up(struct interface *areq) {
   int i, ic, intexists=0;
   struct interface ifs[1024];
+  struct interface  *existing_if = NULL;
   ic = if_list_ips(ifs, 1024);
   for(i=0; i<ic; i++) {
     if(!memcmp(&ifs[i].ipaddr, &(areq->ipaddr), sizeof(struct in_addr))) {
-      _if_error = _if_error_exists;
-      return 1;
+      if(ifs[i].state == ETH_DOWN_STATE)
+        existing_if = &ifs[i];
+      else {
+        _if_error = _if_error_exists;
+        return 1;
+      }
     }
     if(!strcmp(ifs[i].ifname, areq->ifname))
       intexists = 1;
@@ -400,14 +431,18 @@ if_up(struct interface *areq) {
     char vdev[LIFNAMSIZ];
    
     memset(&todo, 0, sizeof(todo));
-    strncpy(todo.lifr_name, areq->ifname, LIFNAMSIZ);
+    if (existing_if) /* eth0:1 on smartos/solaris, preplumed for services*/
+      strncpy(todo.lifr_name, existing_if->ifname, LIFNAMSIZ);
+    else
+      strncpy(todo.lifr_name, areq->ifname, LIFNAMSIZ);
     ((struct sockaddr_in *)&todo.lifr_addr)->sin_family = AF_INET;
     memcpy(&((struct sockaddr_in *)&todo.lifr_addr)->sin_addr, &areq->ipaddr,
 	   sizeof(struct in_addr));
-    if(ioctl(_if_sock, SIOCLIFADDIF, &todo) < 0) {
-      _if_error = _if_error_alias_up_failed;
-      return -1;
-    }
+    if (!existing_if)
+      if(ioctl(_if_sock, SIOCLIFADDIF, &todo) < 0) {
+        _if_error = _if_error_alias_up_failed;
+        return -1;
+      }
     strncpy(vdev, todo.lifr_name, LIFNAMSIZ);
     memset(&todo, 0, sizeof(todo));
     strncpy(todo.lifr_name, vdev, LIFNAMSIZ);
