@@ -8,8 +8,16 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <netinet/if_ether.h>
+#include <ifaddrs.h>
+
+struct in6_ifreq {
+    struct in6_addr ifr6_addr;
+    __u32 ifr6_prefixlen;
+    unsigned int ifr6_ifindex;
+};
 
 static int _if_sock=-1;
+static int _if_sock6=-1;
 static char _if_error_none[] = "";
 static char _if_error_exists[] = "IP alias exists";
 static char _if_error_noneleft[] = "To many VIPs";
@@ -23,6 +31,9 @@ static char *_if_error=_if_error_none;
 
 int if_initialize() {
   if((_if_sock = socket (AF_INET, SOCK_PACKET, htons(ETH_P_RARP))) == -1) {
+    return -1;
+  }
+  if((_if_sock6 = socket (AF_INET6, SOCK_DGRAM, 0)) == -1) {
     return -1;
   }
   return 0;
@@ -88,58 +99,64 @@ if_send_spoof_request(const char *dev,
   }
   return i;
 }
+
 int
 if_list_ips(struct interface *ifs,
-	 int size) {
+	int size) {
   int count=0;
-  struct ifconf d;
-  struct ifreq *ifr, *end, *cur, *temp;
-  struct in_addr ipaddr;
-  char buffer[128];
+  struct ifaddrs *ifap, *ifa;
+  memset(ifs, 0, size * (&ifs[1] - &ifs[0]));
   
-  /* temporary storage for getting broadcast address */
-  temp= (struct ifreq *)buffer;
-  
-  d.ifc_len= 4096;
-  d.ifc_buf= (char *)malloc (d.ifc_len);
-  if(ioctl (_if_sock, SIOCGIFCONF, &d) == -1) {
-    free(d.ifc_buf);
-    return 0;
-  }
-
-  ifr=(struct ifreq *)d.ifc_req;
-  end=(struct ifreq *)((char *) ifr + d.ifc_len);
-  while((ifr<end) && (count<size)) {
-    cur= ifr;
-    ifr=(struct ifreq *)((char *)&ifr[1]);
-    if(cur->ifr_addr.sa_family != AF_INET)
-      continue;
-    memcpy(&ipaddr, &(((struct sockaddr_in *)&cur->ifr_addr)->sin_addr),
-	   sizeof(struct in_addr));
-    memcpy(temp, cur, sizeof(struct ifreq));
-    if(ioctl (_if_sock, SIOCGIFFLAGS, (char *) cur) < 0)
-      continue;
-    if((cur->ifr_flags & IFF_UP) && (cur->ifr_flags & IFF_BROADCAST)) {
-      memcpy(&ifs[count].ipaddr, &ipaddr, sizeof(struct in_addr));
-      if(ioctl(_if_sock, SIOCGIFBRDADDR, (char *)temp) != -1)
-	memcpy(&ifs[count].bcast,
-	       &(((struct sockaddr_in *)&temp->ifr_addr)->sin_addr),
-	       sizeof(struct in_addr));
-      if(ioctl(_if_sock, SIOCGIFNETMASK, (char *)temp) != -1)
-	memcpy(&ifs[count].netmask,
-	       &(((struct sockaddr_in *)&temp->ifr_addr)->sin_addr),
-	       sizeof(struct in_addr));
-      strncpy(ifs[count].ifname, cur->ifr_ifrn.ifrn_name, IFNAMSIZ);
-      count++;
+  if(getifaddrs(&ifap)) return 0;
+ 
+  for(ifa = ifap; ifa; ifa = ifa->ifa_next) {
+	/* Not AF_INET or AF_LINK, then ignore it */
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    if(ifa->ifa_addr->sa_family == AF_INET6) {
+      if((ifa->ifa_flags & IFF_UP) && (ifa->ifa_flags & IFF_BROADCAST)) {
+        ifs[count].family = AF_INET6;
+        memcpy(&ifs[count].ip6addr, &(((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr),
+  	           sizeof(struct in6_addr));
+        memcpy(&ifs[count].netmask6, &(((struct sockaddr_in6 *)ifa->ifa_netmask)->sin6_addr),
+  	           sizeof(struct in6_addr));
+        strncpy(ifs[count].ifname, ifa->ifa_name, IFNAMSIZ);
+        strncpy(ifr.ifr_name, ifa->ifa_name, IFNAMSIZ);
+        if(ioctl(_if_sock, SIOCGIFHWADDR, &ifr) == 0 &&
+           ifr.ifr_hwaddr.sa_family == ARPHRD_ETHER) {
+          memcpy(ifs[count].mac, &ifr.ifr_hwaddr.sa_data, IFHWADDRLEN);
+        }
+        count++;
+        memcpy(&ifs[count], &ifs[count-1], sizeof(struct interface));
+      }
+    }
+    else if(ifa->ifa_addr->sa_family == AF_INET) {
+      if((ifa->ifa_flags & IFF_UP) && (ifa->ifa_flags & IFF_BROADCAST)) {
+        ifs[count].family = AF_INET;
+        memcpy(&ifs[count].ipaddr, &(((struct sockaddr_in *)ifa->ifa_addr)->sin_addr),
+  	      sizeof(struct in_addr));
+        memcpy(&ifs[count].netmask,
+               &(((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr),
+               sizeof(struct in_addr));
+        ifs[count].bcast.s_addr = ifs[count].ipaddr.s_addr | ~ifs[count].netmask.s_addr;
+        strncpy(ifs[count].ifname, ifa->ifa_name, IFNAMSIZ);
+        strncpy(ifr.ifr_name, ifa->ifa_name, IFNAMSIZ);
+        if(ioctl(_if_sock, SIOCGIFHWADDR, &ifr) == 0 &&
+           ifr.ifr_hwaddr.sa_family == ARPHRD_ETHER) {
+          memcpy(ifs[count].mac, &ifr.ifr_hwaddr.sa_data, IFHWADDRLEN);
+        }
+        count++;
+        memcpy(&ifs[count], &ifs[count-1], sizeof(struct interface));
+      }
     }
   }
-  free(d.ifc_buf);
+  freeifaddrs(ifap);
   return count;
 }
 
 int
 if_down(struct interface *areq) {
-  int ic, i, iname, ipaddr, inamlen;
+  int ic, i, iname, hasip, inamlen;
   struct ifreq ifr;
   struct interface ifs[1024];
 
@@ -150,26 +167,54 @@ if_down(struct interface *areq) {
   }
   inamlen = strlen(areq->ifname);
   for(i=0;i<1024;i++) {
-    iname=ipaddr=0;
+    iname=hasip=0;
     if(!areq->ifname[0] ||
 	(!strncmp(areq->ifname, ifs[i].ifname, inamlen) &&
 	 (ifs[i].ifname[inamlen]==':' || ifs[i].ifname[inamlen]=='\0')))
       iname=1;
-    if((areq->ipaddr.s_addr==0) ||
-       (areq->ipaddr.s_addr==ifs[i].ipaddr.s_addr))
-      ipaddr=1;
-    if(iname && ipaddr) {
+    if((areq->family == AF_INET &&
+        (areq->ipaddr.s_addr==0 ||
+         !memcmp(&ifs[i].ipaddr, &(areq->ipaddr), sizeof(struct in_addr))))) {
+      hasip=1;
+    }
+    if((areq->family == AF_INET6 &&
+        !memcmp(&ifs[i].ip6addr, &(areq->ip6addr), sizeof(struct in6_addr)))) {
+      hasip = 1;
+    }
+    if(iname && hasip) {
       strcpy(ifr.ifr_name, ifs[i].ifname);
-      if(ioctl(_if_sock, SIOCGIFFLAGS, (char *)&ifr) > -1) {
-	ifr.ifr_flags &= ~(IFF_RUNNING | IFF_UP);
-	if(ioctl(_if_sock, SIOCSIFFLAGS, (char *)&ifr) > -1) {
-	  _if_error=_if_error_none;
-	  memcpy(areq, &ifs[i], sizeof(struct interface));
-	  return 0;
-	}
-	_if_error = _if_error_setrunning;
-	return -1;
+      if(areq->family == AF_INET) {
+        if(ioctl(_if_sock, SIOCGIFFLAGS, (char *)&ifr) > -1) {
+          ifr.ifr_flags &= ~(IFF_RUNNING | IFF_UP);
+          if(ioctl(_if_sock, SIOCSIFFLAGS, (char *)&ifr) > -1) {
+            _if_error=_if_error_none;
+            memcpy(areq, &ifs[i], sizeof(struct interface));
+            return 0;
+          }
+          _if_error = _if_error_setrunning;
+          return -1;
+        }
       }
+      else if(areq->family == AF_INET6) {
+        struct ifreq ifr;
+        struct in6_ifreq ifr6;
+        memset(&ifr, 0, sizeof(ifr));
+        strncpy(ifr.ifr_name, ifs[i].ifname, IFNAMSIZ);
+        if (ioctl(_if_sock, SIOGIFINDEX, &ifr) < 0) {
+          _if_error = _if_error_nosuchinterface;
+          return -1;
+        }
+        memcpy((char *) &ifr6.ifr6_addr, (char *) &ifs[i].ip6addr,
+    		       sizeof(struct in6_addr));
+        ifr6.ifr6_ifindex = ifr.ifr_ifindex;
+        ifr6.ifr6_prefixlen = set_prefix_from_netmask6(&ifs[i].netmask6);
+        if (ioctl(_if_sock6, SIOCDIFADDR, &ifr6) < 0) {
+          _if_error = _if_error_setrunning;
+          return -1;
+        }
+        return 0;
+      }
+      else break;
     }
   }
   _if_error = _if_error_nosuchinterface;
@@ -191,7 +236,10 @@ if_up(struct interface *areq) {
   ic = if_list_ips(ifs, 1024);
   ifnamsiz = strlen(areq->ifname);
   for(i=0; i<ic; i++) {
-    if(!memcmp(&ifs[i].ipaddr, &(areq->ipaddr), sizeof(struct in_addr))) {
+    if((areq->family == AF_INET &&
+        !memcmp(&ifs[i].ipaddr, &(areq->ipaddr), sizeof(struct in_addr))) ||
+       (areq->family == AF_INET6 &&
+        !memcmp(&ifs[i].ip6addr, &(areq->ip6addr), sizeof(struct in6_addr)))) {
       _if_error = _if_error_exists;
       return 1;
     }
@@ -221,45 +269,64 @@ if_up(struct interface *areq) {
     snprintf(realreq.ifname, IFNAMSIZ, "%s:%d", areq->ifname, vin[i]);    
     memcpy(areq->ifname, realreq.ifname, IFNAMSIZ);    
   }
-  memcpy(ifr.ifr_name, realreq.ifname, IFNAMSIZ);
-  ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr =
-    areq->ipaddr.s_addr;
-  ((struct sockaddr_in *)&ifr.ifr_addr)->sin_family = AF_INET;
-  ((struct sockaddr_in *)&ifr.ifr_addr)->sin_port = 0;
-  
-  if(ioctl( _if_sock, SIOCSIFADDR, (char *)&ifr) != -1) {
-    memcpy(ifq.ifr_name, realreq.ifname, IFNAMSIZ);
-    if(ioctl( _if_sock, SIOCGIFFLAGS, (char *)&ifq) != -1) {
-      if(ifq.ifr_flags & IFF_RUNNING) {
-	ifr.ifr_flags = ifq.ifr_flags | IFF_UP;
-	if(ioctl( _if_sock, SIOCSIFFLAGS, (char *)&ifr) != -1) {
-          ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_addr.s_addr =
-            areq->bcast.s_addr;
-          ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_family = AF_INET;
-          ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_port = 0;
-	  if(ioctl( _if_sock, SIOCSIFBRDADDR, (char *)&ifr) != -1) {
-            ((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr.s_addr =
-              areq->netmask.s_addr;
-            ((struct sockaddr_in *)&ifr.ifr_netmask)->sin_family = AF_INET;
-            ((struct sockaddr_in *)&ifr.ifr_netmask)->sin_port = 0;
-	    if(ioctl( _if_sock, SIOCSIFNETMASK, (char *)&ifr) != -1) {
-	      ifr.ifr_flags = ifq.ifr_flags | IFF_BROADCAST;
-	      if(ioctl( _if_sock, SIOCSIFFLAGS, (char *)&ifr) != -1) {
-		return 0;
-	      }
-	    } else {
-	      _if_error = _if_error_setnetmask;
-	  }
-	  } else {
-	    _if_error = _if_error_setbroadcast;
-	  }
-	} else {
-	  _if_error = _if_error_setrunning;
-	}
-      } 
+  if(areq->family == AF_INET) {
+    memcpy(ifr.ifr_name, realreq.ifname, IFNAMSIZ);
+    ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr =
+      areq->ipaddr.s_addr;
+    ((struct sockaddr_in *)&ifr.ifr_addr)->sin_family = AF_INET;
+    ((struct sockaddr_in *)&ifr.ifr_addr)->sin_port = 0;
+    
+    if(ioctl( _if_sock, SIOCSIFADDR, (char *)&ifr) != -1) {
+      memcpy(ifq.ifr_name, realreq.ifname, IFNAMSIZ);
+      if(ioctl( _if_sock, SIOCGIFFLAGS, (char *)&ifq) != -1) {
+        if(ifq.ifr_flags & IFF_RUNNING) {
+          ifr.ifr_flags = ifq.ifr_flags | IFF_UP;
+          if(ioctl( _if_sock, SIOCSIFFLAGS, (char *)&ifr) != -1) {
+            ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_addr.s_addr = areq->bcast.s_addr;
+            ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_family = AF_INET;
+            ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_port = 0;
+        	  if(ioctl( _if_sock, SIOCSIFBRDADDR, (char *)&ifr) != -1) {
+              ((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr.s_addr = areq->netmask.s_addr;
+              ((struct sockaddr_in *)&ifr.ifr_netmask)->sin_family = AF_INET;
+              ((struct sockaddr_in *)&ifr.ifr_netmask)->sin_port = 0;
+        	    if(ioctl( _if_sock, SIOCSIFNETMASK, (char *)&ifr) != -1) {
+        	      ifr.ifr_flags = ifq.ifr_flags | IFF_BROADCAST;
+                if(ioctl( _if_sock, SIOCSIFFLAGS, (char *)&ifr) != -1) {
+                  return 0;
+        	      }
+              } else {
+        	      _if_error = _if_error_setnetmask;
+              }
+            } else {
+        	    _if_error = _if_error_setbroadcast;
+            }
+          } else {
+            _if_error = _if_error_setrunning;
+          }
+        }
+      }
+    } else {
+      _if_error = _if_error_setip;
     }
-  } else {
-    _if_error = _if_error_setip;
+  }
+  else if(areq->family == AF_INET6) {
+    struct ifreq ifr;
+    struct in6_ifreq ifr6;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, areq->ifname, IFNAMSIZ);
+    if (ioctl(_if_sock, SIOGIFINDEX, &ifr) < 0) {
+      _if_error = _if_error_nosuchinterface;
+      return -1;
+    }
+    memcpy((char *) &ifr6.ifr6_addr, (char *) &areq->ip6addr,
+		       sizeof(struct in6_addr));
+    ifr6.ifr6_ifindex = ifr.ifr_ifindex;
+    ifr6.ifr6_prefixlen = set_prefix_from_netmask6(&areq->netmask6);
+    if (ioctl(_if_sock6, SIOCSIFADDR, &ifr6) < 0) {
+      _if_error = _if_error_setip;
+      return -1;
+    }
+    return 0;
   }
   return -1;
 }

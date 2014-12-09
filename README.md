@@ -15,6 +15,11 @@ IFE is (network) interface management for Node.js.  It works on Linux, Illumos, 
              network:   "10.10.10.0"
     });
 
+    ife.up({ name:      "e1000g0",
+             ip:        "2607:f8b0:4002:c09::64',
+             prefixlen: 64
+    });
+
 Brings up the specified address on the interface "eth0".
 
     var success =

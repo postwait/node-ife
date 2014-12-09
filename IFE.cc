@@ -100,17 +100,27 @@ namespace node {
     cnt = if_list_ips(ifs, 1024);
     Handle<Array> obj = Array::New(cnt);
     for(i=0; i<cnt; i++) {
-      char ipstr[32];
+      char ipstr[64];
       Handle<Object> iface = Object::New();
       iface->Set(String::New("name"), String::New(ifs[i].ifname));
 #define SET_IPV4(attr, name) do { \
   inet_ntop(AF_INET, &ifs[i].attr, ipstr, sizeof(ipstr)); \
   iface->Set(String::New(name), String::New(ipstr)); \
 } while(0)
-      SET_IPV4(ipaddr, "ip");
-      SET_IPV4(bcast, "broadcast");
-      SET_IPV4(netmask, "netmask");
-      SET_IPV4(network, "network");
+#define SET_IPV6(attr, name) do { \
+  inet_ntop(AF_INET6, &ifs[i].attr, ipstr, sizeof(ipstr)); \
+  iface->Set(String::New(name), String::New(ipstr)); \
+} while(0)
+      if(ifs[i].family == AF_INET6) {
+        int len;
+        SET_IPV6(ip6addr, "ip");
+        len = set_prefix_from_netmask6(&ifs[i].netmask6);
+        iface->Set(String::New("prefixlen"), Integer::New(len));
+      } else {
+        SET_IPV4(ipaddr, "ip");
+        SET_IPV4(bcast, "broadcast");
+        SET_IPV4(netmask, "netmask");
+      }
       snprintf(ipstr, sizeof(ipstr), "%02x:%02x:%02x:%02x:%02x:%02x",
                ifs[i].mac[0], ifs[i].mac[1], ifs[i].mac[2],
                ifs[i].mac[3], ifs[i].mac[4], ifs[i].mac[5]);
@@ -138,23 +148,44 @@ namespace node {
     Local<String> name = vname->ToString();
     String::Utf8Value ifname(name);
     strncpy(iface.ifname, *(ifname), IFNAMSIZ);
+
 #define GET_IPV4(attr, name) do { \
-    Local<Value> vip = o->Get(String::New(name)); \
-    if(vip->IsUndefined()) { \
+    Local<Value> ovip = o->Get(String::New(name)); \
+    if(ovip->IsUndefined()) { \
       ThrowException(Exception::TypeError(String::New(name ": undefined"))); \
       return v8::Boolean::New(false); \
     } \
-    Local<String> ip = vip->ToString(); \
-    String::Utf8Value val(ip); \
+    Local<String> addr = ovip->ToString(); \
+    String::Utf8Value val(addr); \
     if(inet_pton(AF_INET, *(val), &iface.attr) != 1) { \
       ThrowException(Exception::TypeError(String::New(*val))); \
       return v8::Boolean::New(false); \
     } \
 } while(0)
-    GET_IPV4(ipaddr, "ip");
-    GET_IPV4(bcast, "broadcast");
-    GET_IPV4(netmask, "netmask");
-    GET_IPV4(network, "network");
+
+    Local<Value> vip = o->Get(String::New("ip"));
+    if(vip->IsUndefined()) {
+      ThrowException(Exception::TypeError(String::New("ip: undefined")));
+      return v8::Boolean::New(false);
+    }
+    Local<String> ip = vip->ToString();
+    String::Utf8Value ipval(ip);
+    if(inet_pton(AF_INET, *(ipval), &iface.ipaddr) == 1) {
+      GET_IPV4(bcast, "broadcast");
+      GET_IPV4(netmask, "netmask");
+      GET_IPV4(network, "network");
+      iface.family = AF_INET;
+    }
+    else if(inet_pton(AF_INET6, *(ipval), &iface.ip6addr) == 1) {
+      Local<Value> pname = o->Get(String::New("prefixlen"));
+      Local<Integer> plen = pname->ToInteger();
+      set_netmask6_from_prefix(&iface.netmask6, plen->Value());
+      iface.family = AF_INET6;
+    }
+    else {
+      ThrowException(Exception::TypeError(String::New(*ipval)));
+      return v8::Boolean::New(false);
+    }
     if(if_up(&iface)) {
       Local<Value> vChr[2];
       vChr[0] = String::New("error");
@@ -179,7 +210,13 @@ namespace node {
     }
     Local<String> ip = args[0]->ToString();
     String::Utf8Value val(ip);
-    if(inet_pton(AF_INET, *(val), &iface.ipaddr) != 1) {
+    if(inet_pton(AF_INET, *(val), &iface.ipaddr) == 1) {
+      iface.family = AF_INET;
+    }
+    else if(inet_pton(AF_INET6, *(val), &iface.ip6addr) == 1) {
+      iface.family = AF_INET6;
+    }
+    else {
       ThrowException(Exception::TypeError(String::New(*val)));
       return scope.Close(Undefined());
     }
