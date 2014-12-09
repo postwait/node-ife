@@ -378,8 +378,8 @@ if_down(struct interface *areq) {
     return 0;
   }
 
+  if (ifs[i].family == AF_INET) {
 #ifdef SIOCLIFREMOVEIF
-  if(isvirtual) {
     struct lifreq todo;
 
     memset(&todo, 0, sizeof(todo));
@@ -387,24 +387,25 @@ if_down(struct interface *areq) {
     ((struct sockaddr_in *)&todo.lifr_addr)->sin_family = AF_INET;
     memcpy(&((struct sockaddr_in *)&todo.lifr_addr)->sin_addr, &areq->ipaddr,
 	   sizeof(struct in_addr));
-    if(state == ETH_DOWN_STATE) { /* Solaris leave preplumbed option */
+    if(isvirtual && state == ETH_DOWN_STATE) { /* Solaris leave preplumbed option */
       if(ioctl(_if_sock, SIOCGLIFFLAGS, &todo) < 0) {
+        _if_error = _if_error_alias_down_failed;
         return -1;
       } else {
         todo.lifr_flags &= ~IFF_UP;
         if(ioctl(_if_sock, SIOCSLIFFLAGS, &todo) < 0) {
+          _if_error = _if_error_alias_down_failed;
           return -1;
         }
       }
     } else {
       if(ioctl(_if_sock, SIOCLIFREMOVEIF, &todo) < 0) {
+        _if_error = _if_error_alias_down_failed;
         return -1;
       }
     }
     return 0;
-  } else
-#endif
-  {
+#else
   /* Normal non-LIF code */
     struct ifreq todo;
 
@@ -430,8 +431,10 @@ if_down(struct interface *areq) {
     if(!isvirtual) {
 	/* FIXME: unplumb here */
     }
+    return 0;
+#endif
   }
-  return 0;
+  return -1;
 }
 
 int
