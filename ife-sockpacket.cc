@@ -113,7 +113,9 @@ if_list_ips(struct interface *ifs,
 	/* Not AF_INET or AF_LINK, then ignore it */
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
-    if(ifa->ifa_addr->sa_family == AF_INET6) {
+    if (ifa->ifa_addr == NULL) {
+    }
+    else if(ifa->ifa_addr->sa_family == AF_INET6) {
       if((ifa->ifa_flags & IFF_UP) && (ifa->ifa_flags & IFF_BROADCAST)) {
         ifs[count].family = AF_INET6;
         memcpy(&ifs[count].ip6addr, &(((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr),

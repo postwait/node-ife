@@ -293,7 +293,9 @@ if_list_ips(struct interface *ifs,
   if(getifaddrs(&ifap)) return 0;
  
   for(ifa = ifap; ifa; ifa = ifa->ifa_next) {
-    if(ifa->ifa_addr->sa_family == AF_INET6) {
+    if(ifa->ifa_addr == NULL) {
+    }
+    else if(ifa->ifa_addr->sa_family == AF_INET6) {
       if(state == ETH_DOWN_STATE || (ifa->ifa_flags & IFF_UP)) {
         ifs[count].family = AF_INET6;
         memcpy(&ifs[count].ip6addr, &(((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr),
