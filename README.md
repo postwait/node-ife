@@ -29,7 +29,7 @@ Brings down the logical interface with the IP address 10.10.10.11.
 
     var ifaces = ife.list()
 
-List all the interfaces on the server.
+List all the broadcast-capable interfaces on the server.
 
     var ip2mac = ife.arpcache();
 
