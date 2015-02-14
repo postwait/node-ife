@@ -1,7 +1,7 @@
 { "name" : "ife"
 , "description" : "Interface Management for Node.js"
 , "keywords" : [ "ife", "ifconfig", "ipconfig" ]
-, "version" : "0.0.9"
+, "version" : "0.0.10"
 , "preferGlobal" : true
 , "author" : { "name" : "Theo Schlossnagle" }
 , "repository" :
