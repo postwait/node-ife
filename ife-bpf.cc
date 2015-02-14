@@ -134,7 +134,9 @@ if_list_ips(struct interface *ifs,
   if(getifaddrs(&ifap)) return 0;
  
   for(ifa = ifap; ifa; ifa = ifa->ifa_next) {
-	/* Handle LL adresses (MAC adress) */
+    if(ifa->ifa_addr == NULL) continue;
+
+    /* Handle LL adresses (MAC adress) */
     if(ifa->ifa_addr->sa_family == AF_LINK) {
       struct sockaddr_dl *sdl = (struct sockaddr_dl *)ifa->ifa_addr;
       if(sdl->sdl_alen != ETH_ALEN) continue;
@@ -145,7 +147,7 @@ if_list_ips(struct interface *ifs,
       continue;
     }
 
-	/* Not AF_INET or AF_LINK, then ignore it */
+    /* Not AF_INET or AF_LINK, then ignore it */
     if(ifa->ifa_addr->sa_family == AF_INET6) {
       if((ifa->ifa_flags & IFF_UP) && (ifa->ifa_flags & IFF_BROADCAST)) {
         ifs[count].family = AF_INET6;

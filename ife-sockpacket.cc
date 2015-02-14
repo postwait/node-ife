@@ -112,6 +112,7 @@ if_list_ips(struct interface *ifs,
   for(ifa = ifap; ifa; ifa = ifa->ifa_next) {
 	/* Not AF_INET or AF_LINK, then ignore it */
     struct ifreq ifr;
+    if(ifa->ifa_addr == NULL) continue;
     memset(&ifr, 0, sizeof(ifr));
     if(ifa->ifa_addr->sa_family == AF_INET6) {
       if((ifa->ifa_flags & IFF_UP) && (ifa->ifa_flags & IFF_BROADCAST)) {

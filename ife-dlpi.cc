@@ -293,6 +293,7 @@ if_list_ips(struct interface *ifs,
   if(getifaddrs(&ifap)) return 0;
  
   for(ifa = ifap; ifa; ifa = ifa->ifa_next) {
+    if(ifa->ifa_addr == NULL) continue;
     if(ifa->ifa_addr->sa_family == AF_INET6) {
       if(state == ETH_DOWN_STATE || (ifa->ifa_flags & IFF_UP)) {
         ifs[count].family = AF_INET6;
